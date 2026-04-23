@@ -1,0 +1,34 @@
+default:
+  image: alpine:3.20
+  before_script:
+    - apk add --no-cache curl git
+    - curl --proto '=https' --tlsv1.2 -fsSL https://get.opentofu.org/install-opentofu.sh -o /tmp/install-opentofu.sh
+    - chmod +x /tmp/install-opentofu.sh
+    - /tmp/install-opentofu.sh --install-method apk
+    - tofu version
+    - export TF_IN_AUTOMATION=true
+    - export TF_PLUGIN_CACHE_DIR="$CI_PROJECT_DIR/.terraform.d/plugin-cache"
+    - mkdir -p "$TF_PLUGIN_CACHE_DIR"
+
+cache:
+  key: tofu-plugin-cache
+  paths:
+    - .terraform.d/plugin-cache/
+
+stages:
+  - check
+
+fmt:
+  stage: check
+  script:
+    - tofu fmt -check -recursive
+
+validate:
+  stage: check
+  script:
+    - tofu -chdir=fabric/vm init -backend=false
+    - tofu -chdir=fabric/vm validate
+    - tofu -chdir=fabric/networking init -backend=false
+    - tofu -chdir=fabric/networking validate
+    - tofu -chdir=examples init -backend=false
+    - tofu -chdir=examples validate

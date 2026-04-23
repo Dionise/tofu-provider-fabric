@@ -1,0 +1,17 @@
+deployment_name = "example"
+aws_region      = "us-east-1"
+
+openstack_auth_url    = "https://openstack.example.com:5000/v3"
+openstack_user_name   = "admin"
+openstack_tenant_name = "admin"
+openstack_password    = "replace-me"
+
+image_release = "debian-12-v2026.04"
+machine_profile = "small"
+ssh_key       = "my-key"
+
+aws_network_mode = "existing"
+aws_network      = "subnet-0abc123"
+
+openstack_network_mode        = "managed"
+openstack_external_network_id = "ext-net-uuid-abcde"
