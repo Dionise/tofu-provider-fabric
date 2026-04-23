@@ -15,9 +15,8 @@ This repo is built around a simple idea: keep one Terraform/OpenTofu shape for a
 
 ## Current approach
 
-- Images are selected through an `image_release` and `image_catalog`
-- AWS sizing is explicit through `aws_instance_type`
-- OpenStack sizing uses `vcpus` and `memory_gb`
+- Images are selected through `image_release` and `image_catalog` — a map keyed by release name, with per-cloud image IDs
+- Sizing is selected through `machine_profile` and `machine_catalog` — a map keyed by profile name, with `aws_instance_type`, `vcpus`, `memory_gb`, and `disk_gb`; the vm module resolves both internally
 - Networking returns provider-shaped outputs:
   - `module.network.aws.subnet_id`
   - `module.network.aws.vpc_id`
@@ -31,7 +30,7 @@ Early stage. The module boundaries are in place, but inputs and outputs may stil
 
 ## Requirements
 
-- OpenTofu `>= 1.6`
+- OpenTofu `>= 1.8` (cross-variable references in validation blocks)
 - AWS provider `~> 5.0`
 - OpenStack provider `~> 1.54`
 
@@ -60,12 +59,8 @@ The example is set up to show:
 locals {
   image_catalog = {
     "debian-12-v2026.04" = {
-      aws = {
-        ami_id = "ami-0123456789abcdef0"
-      }
-      openstack = {
-        image_id = "01234567-89ab-cdef-0123-456789abcdef"
-      }
+      aws       = { ami_id   = "ami-0123456789abcdef0" }
+      openstack = { image_id = "01234567-89ab-cdef-0123-456789abcdef" }
     }
   }
 
@@ -77,8 +72,6 @@ locals {
       disk_gb           = 20
     }
   }
-
-  web = local.machine_profiles["small"]
 }
 
 module "network" {
@@ -97,16 +90,14 @@ module "network" {
 module "web" {
   source = "github.com/Dionise/tofu-provider-fabric//fabric/vm"
 
-  name              = "web"
-  clouds            = ["aws", "openstack"]
-  image_release     = "debian-12-v2026.04"
-  image_catalog     = local.image_catalog
-  aws_instance_type = local.web.aws_instance_type
-  vcpus             = local.web.vcpus
-  memory_gb         = local.web.memory_gb
-  disk_gb           = local.web.disk_gb
-  ssh_key           = "my-key"
-  tags              = { env = "prod", role = "web" }
+  name             = "web"
+  clouds           = ["aws", "openstack"]
+  image_release    = "debian-12-v2026.04"
+  image_catalog    = local.image_catalog
+  machine_profile  = "small"
+  machine_catalog  = local.machine_profiles
+  ssh_key          = "my-key"
+  tags             = { env = "prod", role = "web" }
 
   aws_network       = module.network.aws.subnet_id
   openstack_network = module.network.openstack.network_id
@@ -122,10 +113,8 @@ This module creates the VM resources.
 What you pass in:
 
 - `clouds`
-- `image_release`
-- `image_catalog`
-- `aws_instance_type` when AWS is enabled
-- `vcpus` and `memory_gb` when OpenStack is enabled
+- `image_release` and `image_catalog` — the module resolves the right image per cloud
+- `machine_profile` and `machine_catalog` — the module resolves instance type, vCPUs, memory, and disk
 - provider-specific network attachment IDs
 
 What it returns:

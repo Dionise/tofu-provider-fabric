@@ -51,10 +51,6 @@ variable "machine_profile" {
   type        = string
   default     = "small"
   description = "Named machine profile used by the example stack."
-  validation {
-    condition     = contains(["small", "medium", "large"], var.machine_profile)
-    error_message = "machine_profile must be one of: small, medium, large."
-  }
 }
 
 variable "ssh_key" {
