@@ -4,6 +4,9 @@ OpenTofu modules for small cross-cloud VM workflows on AWS and OpenStack.
 
 This repo is built around a simple idea: keep one Terraform/OpenTofu shape for a machine, but do not pretend AWS and OpenStack are identical under the hood. Image selection, sizing, and networking stay explicit where they need to.
 
+- GitLab repository: [GitLab](https://gitlab.com/moscalu.dionisie/tofu-provider-fabric)
+- GitHub repository: [GitHub](https://github.com/Dionise/tofu-provider-fabric)
+
 ## What is here
 
 - `fabric/vm` creates a VM on the clouds you enable
@@ -79,7 +82,7 @@ locals {
 }
 
 module "network" {
-  source = "github.com/dionisiemoscalu/tofu-provider-fabric//fabric/networking"
+  source = "github.com/Dionise/tofu-provider-fabric//fabric/networking"
 
   name   = "example"
   clouds = ["aws", "openstack"]
@@ -92,7 +95,7 @@ module "network" {
 }
 
 module "web" {
-  source = "github.com/dionisiemoscalu/tofu-provider-fabric//fabric/vm"
+  source = "github.com/Dionise/tofu-provider-fabric//fabric/vm"
 
   name              = "web"
   clouds            = ["aws", "openstack"]
