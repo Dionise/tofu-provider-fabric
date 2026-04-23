@@ -2,9 +2,6 @@
 
 OpenTofu modules for deploying VMs on AWS and OpenStack without pretending the two clouds are the same.
 
-- GitLab: https://gitlab.com/moscalu.dionisie/tofu-provider-fabric
-- GitHub: https://github.com/Dionise/tofu-provider-fabric
-
 ## Modules
 
 **`fabric/vm`** — creates a VM on one or both clouds. Handles image selection, sizing, and security groups internally. Call it once, it does the right thing per cloud.
