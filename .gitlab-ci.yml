@@ -28,6 +28,8 @@ validate:
   script:
     - tofu -chdir=fabric/vm init -backend=false
     - tofu -chdir=fabric/vm validate
+    - tofu -chdir=fabric/public-ip init -backend=false
+    - tofu -chdir=fabric/public-ip validate
     - tofu -chdir=fabric/networking init -backend=false
     - tofu -chdir=fabric/networking validate
     - tofu -chdir=examples init -backend=false

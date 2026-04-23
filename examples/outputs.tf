@@ -5,11 +5,11 @@ output "network" {
   }
 }
 
-output "ips" {
+output "public_ip" {
   value = {
     web = {
-      aws       = module.web.aws_public_ip
-      openstack = module.web.openstack_public_ip
+      aws       = module.public_ip.aws
+      openstack = module.public_ip.openstack
     }
   }
 }

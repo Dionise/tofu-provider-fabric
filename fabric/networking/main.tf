@@ -5,7 +5,7 @@ locals {
   use_managed_aws    = local.use_aws && var.aws_network_mode == "managed"
   use_existing_os    = local.use_openstack && var.openstack_network_mode == "existing"
   use_managed_os     = local.use_openstack && var.openstack_network_mode == "managed"
-  use_openstack_edge = local.use_managed_os && var.openstack_external_network_id != ""
+  use_openstack_edge = local.use_managed_os && var.openstack_external_network_name != ""
 }
 
 data "aws_subnet" "existing" {
@@ -86,10 +86,16 @@ resource "openstack_networking_subnet_v2" "managed" {
   dns_nameservers = var.openstack_dns_nameservers
 }
 
+data "openstack_networking_network_v2" "external" {
+  count    = local.use_openstack_edge ? 1 : 0
+  name     = var.openstack_external_network_name
+  external = true
+}
+
 resource "openstack_networking_router_v2" "managed" {
   count               = local.use_openstack_edge ? 1 : 0
   name                = "${var.name}-router"
-  external_network_id = var.openstack_external_network_id
+  external_network_id = data.openstack_networking_network_v2.external[0].id
 }
 
 resource "openstack_networking_router_interface_v2" "managed" {

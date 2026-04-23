@@ -90,8 +90,8 @@ variable "openstack_enable_dhcp" {
   description = "Whether DHCP is enabled on a managed OpenStack subnet."
 }
 
-variable "openstack_external_network_id" {
+variable "openstack_external_network_name" {
   type        = string
   default     = ""
-  description = "External OpenStack network UUID used to route a managed tenant network."
+  description = "External OpenStack network name used to route a managed tenant network."
 }

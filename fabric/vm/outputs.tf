@@ -5,7 +5,7 @@ output "aws_instance_id" {
 
 output "aws_public_ip" {
   value       = length(aws_instance.this) > 0 ? aws_instance.this[0].public_ip : ""
-  description = "AWS public IP, or empty if AWS is not in clouds."
+  description = "AWS instance public IP, or empty if the instance does not have one."
 }
 
 output "openstack_instance_id" {
@@ -15,5 +15,5 @@ output "openstack_instance_id" {
 
 output "openstack_public_ip" {
   value       = length(openstack_compute_instance_v2.this) > 0 ? openstack_compute_instance_v2.this[0].access_ip_v4 : ""
-  description = "OpenStack IP, or empty if OpenStack is not in clouds."
+  description = "OpenStack instance access_ip_v4 value, or empty if it is not set."
 }

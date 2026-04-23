@@ -78,6 +78,46 @@ variable "tags" {
   description = "Key/value tags applied to all resources on every cloud."
 }
 
+variable "security_group_rules" {
+  type = list(object({
+    direction = string
+    protocol  = string
+    port_min  = optional(number)
+    port_max  = optional(number)
+    cidr      = string
+  }))
+  default     = []
+  description = "Security group rules applied to the instance on every cloud."
+}
+
+variable "aws_extra_rules" {
+  type = list(object({
+    direction                    = string
+    protocol                     = string
+    port_min                     = optional(number)
+    port_max                     = optional(number)
+    cidr                         = optional(string)
+    cidr_ipv6                    = optional(string)
+    referenced_security_group_id = optional(string)
+  }))
+  default     = []
+  description = "AWS-only security group rules. Use for IPv6 CIDRs or SG-to-SG references not expressible in security_group_rules."
+}
+
+variable "openstack_extra_rules" {
+  type = list(object({
+    direction       = string
+    protocol        = optional(string)
+    port_min        = optional(number)
+    port_max        = optional(number)
+    cidr            = optional(string)
+    remote_group_id = optional(string)
+    ethertype       = optional(string, "IPv4")
+  }))
+  default     = []
+  description = "OpenStack-only security group rules. Use for remote group references or IPv6 rules not expressible in security_group_rules."
+}
+
 variable "aws_network" {
   type        = string
   default     = ""

@@ -1,5 +1,15 @@
+locals {
+  aws_active = contains(tolist(var.clouds), "aws")
+}
+
 provider "aws" {
   region = var.aws_region
+
+  access_key                  = local.aws_active ? null : "placeholder"
+  secret_key                  = local.aws_active ? null : "placeholder"
+  skip_credentials_validation = !local.aws_active
+  skip_metadata_api_check     = !local.aws_active
+  skip_requesting_account_id  = !local.aws_active
 }
 
 provider "openstack" {
