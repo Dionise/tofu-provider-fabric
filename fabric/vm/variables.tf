@@ -45,22 +45,25 @@ variable "image_catalog" {
   description = "Release catalog keyed by release name. Each release maps to cloud-specific image IDs."
 }
 
-variable "vcpus" {
-  type        = number
-  default     = 2
-  description = "Number of vCPUs used for OpenStack flavor lookup."
+variable "machine_catalog" {
+  type = map(object({
+    aws_instance_type = string
+    vcpus             = number
+    memory_gb         = number
+    disk_gb           = number
+  }))
+  default     = {}
+  description = "Profile catalog keyed by profile name."
 }
 
-variable "memory_gb" {
-  type        = number
-  default     = 4
-  description = "Memory in GB used with vcpus for OpenStack flavor lookup."
-}
-
-variable "disk_gb" {
-  type        = number
-  default     = 20
-  description = "Root disk size in GB."
+variable "machine_profile" {
+  type        = string
+  default     = "small"
+  description = "Profile name selected from machine_catalog."
+  validation {
+    condition     = length(var.machine_catalog) == 0 || contains(keys(var.machine_catalog), var.machine_profile)
+    error_message = "machine_profile must match a key in machine_catalog."
+  }
 }
 
 variable "ssh_key" {
@@ -79,16 +82,6 @@ variable "aws_network" {
   type        = string
   default     = ""
   description = "AWS subnet ID to launch the instance in."
-}
-
-variable "aws_instance_type" {
-  type        = string
-  default     = ""
-  description = "AWS instance type such as t3.medium."
-  validation {
-    condition     = !contains(tolist(var.clouds), "aws") || var.aws_instance_type != ""
-    error_message = "aws_instance_type must be set when clouds includes aws."
-  }
 }
 
 variable "openstack_network" {

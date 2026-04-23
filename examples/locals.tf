@@ -31,8 +31,6 @@ locals {
     }
   }
 
-  web_instance = local.machine_profiles[var.machine_profile]
-
   common_tags = {
     env     = "prod"
     service = var.deployment_name

@@ -15,16 +15,14 @@ module "network" {
 module "web" {
   source = "../fabric/vm"
 
-  name              = "web"
-  clouds            = var.clouds
-  image_release     = var.image_release
-  image_catalog     = local.image_catalog
-  aws_instance_type = local.web_instance.aws_instance_type
-  vcpus             = local.web_instance.vcpus
-  memory_gb         = local.web_instance.memory_gb
-  disk_gb           = local.web_instance.disk_gb
-  ssh_key           = var.ssh_key
-  tags              = merge(local.common_tags, { role = "web" })
+  name            = "web"
+  clouds          = var.clouds
+  image_release   = var.image_release
+  image_catalog   = local.image_catalog
+  machine_catalog = local.machine_profiles
+  machine_profile = var.machine_profile
+  ssh_key         = var.ssh_key
+  tags            = merge(local.common_tags, { role = "web" })
 
   aws_network       = module.network.aws.subnet_id
   openstack_network = module.network.openstack.network_id
