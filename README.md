@@ -1,6 +1,57 @@
-# fabric
+# tofu-provider-fabric
 
-OpenTofu modules for launching the same VM definition on AWS, OpenStack, or both.
+OpenTofu modules for small cross-cloud VM workflows on AWS and OpenStack.
+
+This repo is built around a simple idea: keep one Terraform/OpenTofu shape for a machine, but do not pretend AWS and OpenStack are identical under the hood. Image selection, sizing, and networking stay explicit where they need to.
+
+## What is here
+
+- `fabric/vm` creates a VM on the clouds you enable
+- `fabric/networking` either attaches to existing networking or creates a minimal managed network
+- `examples/` shows a small stack split into providers, locals, variables, main, and outputs
+
+## Current approach
+
+- Images are selected through an `image_release` and `image_catalog`
+- AWS sizing is explicit through `aws_instance_type`
+- OpenStack sizing uses `vcpus` and `memory_gb`
+- Networking returns provider-shaped outputs:
+  - `module.network.aws.subnet_id`
+  - `module.network.aws.vpc_id`
+  - `module.network.openstack.network_id`
+  - `module.network.openstack.subnet_id`
+  - `module.network.openstack.router_id`
+
+## Status
+
+Early stage. The module boundaries are in place, but inputs and outputs may still change while the layout settles.
+
+## Requirements
+
+- OpenTofu `>= 1.6`
+- AWS provider `~> 5.0`
+- OpenStack provider `~> 1.54`
+
+## Quick start
+
+The easiest place to start is the example stack.
+
+```bash
+cd examples
+cp terraform.tfvars.example terraform.tfvars
+# edit terraform.tfvars
+tofu init
+tofu plan
+```
+
+The example is set up to show:
+
+- a named `image_release`
+- a named `machine_profile`
+- existing networking on AWS
+- managed networking on OpenStack
+
+## Example
 
 ```hcl
 locals {
@@ -24,64 +75,9 @@ locals {
     }
   }
 
-  web_instance = local.machine_profiles["small"]
+  web = local.machine_profiles["small"]
 }
 
-module "web" {
-  source = "github.com/dionisiemoscalu/tofu-provider-fabric//fabric/vm"
-
-  name              = "web"
-  clouds            = ["aws", "openstack"]
-  image_release     = "debian-12-v2026.04"
-  image_catalog     = local.image_catalog
-  aws_instance_type = local.web_instance.aws_instance_type
-  vcpus             = local.web_instance.vcpus
-  memory_gb         = local.web_instance.memory_gb
-  disk_gb           = local.web_instance.disk_gb
-  ssh_key           = "my-key"
-  tags              = { env = "prod" }
-
-  aws_network       = "subnet-0abc123"
-  openstack_network = "net-uuid-abcde"
-}
-```
-
-Use the same module inputs whether you are targeting one cloud or several. The image choice now comes from a named release instead of provider-specific lookup rules.
-
-## Modules
-
-### `fabric/vm`
-
-Creates a VM on the clouds listed in `clouds`.
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `name` | Instance name | `"vm"` |
-| `clouds` | `["aws"]`, `["openstack"]`, or both | `[]` |
-| `image_release` | Release name from `image_catalog` | `""` |
-| `image_catalog` | Map of release names to AWS/OpenStack image IDs | `{}` |
-| `aws_instance_type` | AWS instance type such as `t3.medium` | `""` |
-| `vcpus` | CPU count | `2` |
-| `memory_gb` | Memory in GB | `4` |
-| `disk_gb` | Root disk size in GB | `20` |
-| `ssh_key` | Existing key pair name | `""` |
-| `tags` | Resource tags or metadata | `{}` |
-| `aws_network` | AWS subnet ID | `""` |
-| `openstack_network` | OpenStack network UUID | `""` |
-
-### `fabric/networking`
-
-Handles the network attachment point for each cloud and returns provider-specific objects.
-
-It supports both patterns:
-
-- Attach to an existing AWS subnet or OpenStack network.
-- Create a minimal managed network for the cloud and return the IDs the VM module needs.
-- Consume provider-specific outputs such as `module.network.aws.subnet_id` and `module.network.openstack.network_id`.
-
-Example:
-
-```hcl
 module "network" {
   source = "github.com/dionisiemoscalu/tofu-provider-fabric//fabric/networking"
 
@@ -102,33 +98,72 @@ module "web" {
   clouds            = ["aws", "openstack"]
   image_release     = "debian-12-v2026.04"
   image_catalog     = local.image_catalog
-  aws_instance_type = local.web_instance.aws_instance_type
-  vcpus             = local.web_instance.vcpus
-  memory_gb         = local.web_instance.memory_gb
-  disk_gb           = local.web_instance.disk_gb
+  aws_instance_type = local.web.aws_instance_type
+  vcpus             = local.web.vcpus
+  memory_gb         = local.web.memory_gb
+  disk_gb           = local.web.disk_gb
+  ssh_key           = "my-key"
+  tags              = { env = "prod", role = "web" }
 
   aws_network       = module.network.aws.subnet_id
   openstack_network = module.network.openstack.network_id
 }
 ```
 
-## Notes
+## Modules
 
-- The module deploys from a named image release, not from a provider-side "latest image" search.
-- Each release maps to exact cloud-specific artifacts such as an AWS AMI ID and an OpenStack image ID.
-- `aws_instance_type` is explicit, while `vcpus` and `memory_gb` are used for OpenStack flavor lookup.
-- Both modules default to a no-op shape until you enable clouds and provide the matching inputs.
-- The modules use the AWS and OpenStack providers directly.
-- The example stack chooses a named `machine_profile` and resolves that into cloud-specific sizing in `locals`.
-- The networking module returns structured provider outputs instead of flattening AWS and OpenStack into one shape.
-- The `examples/` directory keeps providers, locals, variables, and outputs separate, while the actual deployment flow stays together in one file.
+### `fabric/vm`
 
-## Requirements
+This module creates the VM resources.
 
-- OpenTofu >= 1.6
-- AWS provider ~> 5.0
-- OpenStack provider ~> 1.54
+What you pass in:
 
-## Adding another cloud
+- `clouds`
+- `image_release`
+- `image_catalog`
+- `aws_instance_type` when AWS is enabled
+- `vcpus` and `memory_gb` when OpenStack is enabled
+- provider-specific network attachment IDs
 
-Follow the same pattern used in `fabric/vm/main.tf`: gate the new data sources and resources on whether that cloud is present in `var.clouds`.
+What it returns:
+
+- AWS instance ID and public IP
+- OpenStack instance ID and public IP
+
+### `fabric/networking`
+
+This module is intentionally narrow. It is not trying to be a full generic networking framework.
+
+It supports two modes per cloud:
+
+- use an existing AWS subnet or OpenStack network
+- create a minimal managed topology for that cloud
+
+Managed mode currently means:
+
+- AWS: VPC, subnet, internet gateway, route table, route table association
+- OpenStack: network, subnet, and optional router when an external network is provided
+
+## CI
+
+GitLab CI runs a small verification pipeline:
+
+- `tofu fmt -check -recursive`
+- `tofu init -backend=false`
+- `tofu validate`
+
+The pipeline checks `fabric/vm`, `fabric/networking`, and `examples`.
+
+## What this repo is not trying to do
+
+- hide every provider difference behind one fake abstraction
+- auto-discover "latest" images at apply time
+- act as a full networking platform for every topology
+
+## Contributing
+
+Issues and pull requests are welcome. If you change the module interface, update the example stack and README in the same change.
+
+## License
+
+This project is licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE).
