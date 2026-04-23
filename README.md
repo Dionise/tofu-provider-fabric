@@ -1,161 +1,99 @@
 # tofu-provider-fabric
 
-OpenTofu modules for small cross-cloud VM workflows on AWS and OpenStack.
+OpenTofu modules for deploying VMs on AWS and OpenStack without pretending the two clouds are the same.
 
-This repo is built around a simple idea: keep one Terraform/OpenTofu shape for a machine, but do not pretend AWS and OpenStack are identical under the hood. Image selection, sizing, and networking stay explicit where they need to.
+- GitLab: https://gitlab.com/moscalu.dionisie/tofu-provider-fabric
+- GitHub: https://github.com/Dionise/tofu-provider-fabric
 
-- GitLab repository: [GitLab](https://gitlab.com/moscalu.dionisie/tofu-provider-fabric)
-- GitHub repository: [GitHub](https://github.com/Dionise/tofu-provider-fabric)
+## Modules
 
-## What is here
+**`fabric/vm`** — creates a VM on one or both clouds. Handles image selection, sizing, and security groups internally. Call it once, it does the right thing per cloud.
 
-- `fabric/vm` creates a VM on the clouds you enable
-- `fabric/networking` either attaches to existing networking or creates a minimal managed network
-- `examples/` shows a small stack split into providers, locals, variables, main, and outputs
+**`fabric/security-groups`** — creates and manages security groups. Used internally by `fabric/vm`, but can also be called standalone when you need a shared group across multiple VMs.
 
-## Current approach
+**`fabric/networking`** — attaches to existing network infrastructure or creates a minimal one (VPC + subnet + IGW on AWS, network + subnet + router on OpenStack).
 
-- Images are selected through `image_release` and `image_catalog` — a map keyed by release name, with per-cloud image IDs
-- Sizing is selected through `machine_profile` and `machine_catalog` — a map keyed by profile name, with `aws_instance_type`, `vcpus`, `memory_gb`, and `disk_gb`; the vm module resolves both internally
-- Networking returns provider-shaped outputs:
-  - `module.network.aws.subnet_id`
-  - `module.network.aws.vpc_id`
-  - `module.network.openstack.network_id`
-  - `module.network.openstack.subnet_id`
-  - `module.network.openstack.router_id`
-
-## Status
-
-Early stage. The module boundaries are in place, but inputs and outputs may still change while the layout settles.
+**`fabric/public-ip`** — allocates a stable public IP (Elastic IP on AWS, floating IP on OpenStack) and attaches it to an instance.
 
 ## Requirements
 
-- OpenTofu `>= 1.8` (cross-variable references in validation blocks)
-- AWS provider `~> 5.0`
-- OpenStack provider `~> 1.54`
+- OpenTofu >= 1.8
+- AWS provider ~> 5.0
+- OpenStack provider ~> 1.54
 
-## Quick start
-
-The easiest place to start is the example stack.
-
-```bash
-cd examples
-cp terraform.tfvars.example terraform.tfvars
-# edit terraform.tfvars
-tofu init
-tofu plan
-```
-
-The example is set up to show:
-
-- a named `image_release`
-- a named `machine_profile`
-- existing networking on AWS
-- managed networking on OpenStack
-
-## Example
+## Usage
 
 ```hcl
-locals {
-  image_catalog = {
-    "debian-12-v2026.04" = {
-      aws       = { ami_id   = "ami-0123456789abcdef0" }
-      openstack = { image_id = "01234567-89ab-cdef-0123-456789abcdef" }
-    }
-  }
-
-  machine_profiles = {
-    small = {
-      aws_instance_type = "t3.medium"
-      vcpus             = 2
-      memory_gb         = 4
-      disk_gb           = 20
-    }
-  }
-}
-
 module "network" {
   source = "github.com/Dionise/tofu-provider-fabric//fabric/networking"
 
-  name   = "example"
+  name   = "prod"
   clouds = ["aws", "openstack"]
 
   aws_network_mode = "existing"
   aws_network      = "subnet-0abc123"
 
-  openstack_network_mode        = "managed"
-  openstack_external_network_id = "ext-net-uuid-abcde"
+  openstack_network_mode          = "managed"
+  openstack_external_network_name = "Admin"
 }
 
 module "web" {
   source = "github.com/Dionise/tofu-provider-fabric//fabric/vm"
 
-  name             = "web"
-  clouds           = ["aws", "openstack"]
-  image_release    = "debian-12-v2026.04"
-  image_catalog    = local.image_catalog
-  machine_profile  = "small"
-  machine_catalog  = local.machine_profiles
-  ssh_key          = "my-key"
-  tags             = { env = "prod", role = "web" }
+  name   = "web"
+  clouds = ["aws", "openstack"]
+
+  image_release   = "debian-12-generic-amd64-20250210-2019"
+  image_catalog   = local.image_catalog
+  machine_profile = "small"
+  machine_catalog = local.machine_profiles
+
+  security_group_rules = [
+    { direction = "ingress", protocol = "tcp", port_min = 22,  port_max = 22,  cidr = "0.0.0.0/0" },
+    { direction = "ingress", protocol = "icmp", cidr = "0.0.0.0/0" },
+    { direction = "egress",  protocol = "-1",   cidr = "0.0.0.0/0" },
+  ]
 
   aws_network       = module.network.aws.subnet_id
   openstack_network = module.network.openstack.network_id
 }
 ```
 
-## Modules
+Security group rules in `security_group_rules` apply to both clouds from one list. For anything cloud-specific (IPv6, SG-to-SG on AWS, remote groups on OpenStack) there are escape hatches:
 
-### `fabric/vm`
+```hcl
+aws_extra_rules = [
+  { direction = "ingress", protocol = "tcp", port_min = 443, port_max = 443, cidr_ipv6 = "::/0" },
+]
 
-This module creates the VM resources.
+openstack_extra_rules = [
+  { direction = "ingress", protocol = "tcp", port_min = 8080, port_max = 8080, remote_group_id = "uuid" },
+]
+```
 
-What you pass in:
+Image and machine catalogs are maps you define and pass in — the modules do not have opinions about what images or sizes exist in your environment:
 
-- `clouds`
-- `image_release` and `image_catalog` — the module resolves the right image per cloud
-- `machine_profile` and `machine_catalog` — the module resolves instance type, vCPUs, memory, and disk
-- provider-specific network attachment IDs
+```hcl
+locals {
+  image_catalog = {
+    "debian-12-generic-amd64-20250210-2019" = {
+      aws       = { ami_id   = "ami-0abc123" }
+      openstack = { image_id = "3b64d4a7-8530-4a39-9c23-81dae1d5075d" }
+    }
+  }
 
-What it returns:
-
-- AWS instance ID and public IP
-- OpenStack instance ID and public IP
-
-### `fabric/networking`
-
-This module is intentionally narrow. It is not trying to be a full generic networking framework.
-
-It supports two modes per cloud:
-
-- use an existing AWS subnet or OpenStack network
-- create a minimal managed topology for that cloud
-
-Managed mode currently means:
-
-- AWS: VPC, subnet, internet gateway, route table, route table association
-- OpenStack: network, subnet, and optional router when an external network is provided
+  machine_profiles = {
+    small  = { aws_instance_type = "t3.medium", vcpus = 2, memory_gb = 4,  disk_gb = 20 }
+    medium = { aws_instance_type = "m5.large",  vcpus = 4, memory_gb = 8,  disk_gb = 40 }
+    large  = { aws_instance_type = "m5.xlarge", vcpus = 8, memory_gb = 16, disk_gb = 80 }
+  }
+}
+```
 
 ## CI
 
-GitLab CI runs a small verification pipeline:
-
-- `tofu fmt -check -recursive`
-- `tofu init -backend=false`
-- `tofu validate`
-
-The pipeline checks `fabric/vm`, `fabric/networking`, and `examples`.
-
-## What this repo is not trying to do
-
-- hide every provider difference behind one fake abstraction
-- auto-discover "latest" images at apply time
-- act as a full networking platform for every topology
-
-## Contributing
-
-Issues and pull requests are welcome. If you change the module interface, update the example stack and README in the same change.
+Runs `tofu fmt -check`, `tofu init`, and `tofu validate` across all modules and the example stack.
 
 ## License
 
-This project is licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE).
+Mozilla Public License 2.0 — see [LICENSE](LICENSE).

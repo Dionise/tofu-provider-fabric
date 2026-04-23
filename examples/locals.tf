@@ -1,11 +1,11 @@
 locals {
   image_catalog = {
-    "debian-12-v2026.04" = {
+    "debian-12-generic-amd64-20250210-2019" = {
       aws = {
         ami_id = "ami-0123456789abcdef0"
       }
       openstack = {
-        image_id = "01234567-89ab-cdef-0123-456789abcdef"
+        image_id = "3b64d4a7-8530-4a39-9c23-81dae1d5075d"
       }
     }
   }
