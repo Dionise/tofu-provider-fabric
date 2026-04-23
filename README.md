@@ -1,93 +1,134 @@
-# Tofu provider fabric
+# fabric
 
+OpenTofu modules for launching the same VM definition on AWS, OpenStack, or both.
 
+```hcl
+locals {
+  image_catalog = {
+    "debian-12-v2026.04" = {
+      aws = {
+        ami_id = "ami-0123456789abcdef0"
+      }
+      openstack = {
+        image_id = "01234567-89ab-cdef-0123-456789abcdef"
+      }
+    }
+  }
 
-## Getting started
+  machine_profiles = {
+    small = {
+      aws_instance_type = "t3.medium"
+      vcpus             = 2
+      memory_gb         = 4
+      disk_gb           = 20
+    }
+  }
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+  web_instance = local.machine_profiles["small"]
+}
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+module "web" {
+  source = "github.com/dionisiemoscalu/tofu-provider-fabric//fabric/vm"
 
-## Add your files
+  name              = "web"
+  clouds            = ["aws", "openstack"]
+  image_release     = "debian-12-v2026.04"
+  image_catalog     = local.image_catalog
+  aws_instance_type = local.web_instance.aws_instance_type
+  vcpus             = local.web_instance.vcpus
+  memory_gb         = local.web_instance.memory_gb
+  disk_gb           = local.web_instance.disk_gb
+  ssh_key           = "my-key"
+  tags              = { env = "prod" }
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+  aws_network       = "subnet-0abc123"
+  openstack_network = "net-uuid-abcde"
+}
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/manstirea-nicoreni/tofu-provider-fabric.git
-git branch -M main
-git push -uf origin main
+
+Use the same module inputs whether you are targeting one cloud or several. The image choice now comes from a named release instead of provider-specific lookup rules.
+
+## Modules
+
+### `fabric/vm`
+
+Creates a VM on the clouds listed in `clouds`.
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `name` | Instance name | `"vm"` |
+| `clouds` | `["aws"]`, `["openstack"]`, or both | `[]` |
+| `image_release` | Release name from `image_catalog` | `""` |
+| `image_catalog` | Map of release names to AWS/OpenStack image IDs | `{}` |
+| `aws_instance_type` | AWS instance type such as `t3.medium` | `""` |
+| `vcpus` | CPU count | `2` |
+| `memory_gb` | Memory in GB | `4` |
+| `disk_gb` | Root disk size in GB | `20` |
+| `ssh_key` | Existing key pair name | `""` |
+| `tags` | Resource tags or metadata | `{}` |
+| `aws_network` | AWS subnet ID | `""` |
+| `openstack_network` | OpenStack network UUID | `""` |
+
+### `fabric/networking`
+
+Handles the network attachment point for each cloud and returns provider-specific objects.
+
+It supports both patterns:
+
+- Attach to an existing AWS subnet or OpenStack network.
+- Create a minimal managed network for the cloud and return the IDs the VM module needs.
+- Consume provider-specific outputs such as `module.network.aws.subnet_id` and `module.network.openstack.network_id`.
+
+Example:
+
+```hcl
+module "network" {
+  source = "github.com/dionisiemoscalu/tofu-provider-fabric//fabric/networking"
+
+  name   = "example"
+  clouds = ["aws", "openstack"]
+
+  aws_network_mode = "existing"
+  aws_network      = "subnet-0abc123"
+
+  openstack_network_mode        = "managed"
+  openstack_external_network_id = "ext-net-uuid-abcde"
+}
+
+module "web" {
+  source = "github.com/dionisiemoscalu/tofu-provider-fabric//fabric/vm"
+
+  name              = "web"
+  clouds            = ["aws", "openstack"]
+  image_release     = "debian-12-v2026.04"
+  image_catalog     = local.image_catalog
+  aws_instance_type = local.web_instance.aws_instance_type
+  vcpus             = local.web_instance.vcpus
+  memory_gb         = local.web_instance.memory_gb
+  disk_gb           = local.web_instance.disk_gb
+
+  aws_network       = module.network.aws.subnet_id
+  openstack_network = module.network.openstack.network_id
+}
 ```
 
-## Integrate with your tools
+## Notes
 
-* [Set up project integrations](https://gitlab.com/manstirea-nicoreni/tofu-provider-fabric/-/settings/integrations)
+- The module deploys from a named image release, not from a provider-side "latest image" search.
+- Each release maps to exact cloud-specific artifacts such as an AWS AMI ID and an OpenStack image ID.
+- `aws_instance_type` is explicit, while `vcpus` and `memory_gb` are used for OpenStack flavor lookup.
+- Both modules default to a no-op shape until you enable clouds and provide the matching inputs.
+- The modules use the AWS and OpenStack providers directly.
+- The example stack chooses a named `machine_profile` and resolves that into cloud-specific sizing in `locals`.
+- The networking module returns structured provider outputs instead of flattening AWS and OpenStack into one shape.
+- The `examples/` directory keeps providers, locals, variables, and outputs separate, while the actual deployment flow stays together in one file.
 
-## Collaborate with your team
+## Requirements
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+- OpenTofu >= 1.6
+- AWS provider ~> 5.0
+- OpenStack provider ~> 1.54
 
-## Test and Deploy
+## Adding another cloud
 
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Follow the same pattern used in `fabric/vm/main.tf`: gate the new data sources and resources on whether that cloud is present in `var.clouds`.
